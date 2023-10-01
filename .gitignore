@@ -24,4 +24,4 @@ go.work
 .vscode
 .idea
 logs
-old
+/old/
