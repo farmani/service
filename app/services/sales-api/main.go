@@ -10,6 +10,8 @@ import (
 	"syscall"
 )
 
+var build = "develop"
+
 func main() {
 	log, err := logger.NewZapLogger("sales-api", "logs/sales-api.log")
 	if err != nil {
