@@ -31,8 +31,7 @@ func main() {
 	if err != nil {
 		if errors.Is(err, conf.ErrHelpWanted) {
 			fmt.Println(help)
-			return nil
 		}
-		return fmt.Errorf("parsing config: %w", err)
+		fmt.Printf("parsing config: %v", err)
 	}
 }

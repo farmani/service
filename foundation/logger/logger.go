@@ -1,13 +1,11 @@
 package logger
 
 import (
-	"errors"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"io"
 	"os"
 	"sync"
-	"syscall"
 )
 
 type Level int8
@@ -38,149 +36,45 @@ type Logger struct {
 	mu       sync.Mutex
 }
 
-func NewZapLogger(path string, env string) *zap.Logger {
-	logger := zap.Must(zap.NewProduction())
-	switch env {
-	case "production":
-		encoderCfg := zap.NewProductionEncoderConfig()
-		encoderCfg.TimeKey = "timestamp"
-		encoderCfg.EncodeTime = zapcore.ISO8601TimeEncoder
-		encoderCfg.LevelKey = "level"
-		encoderCfg.NameKey = "logger"
-		encoderCfg.CallerKey = "caller"
-		encoderCfg.MessageKey = "message"
-		encoderCfg.StacktraceKey = "stacktrace"
-		encoderCfg.EncodeLevel = zapcore.CapitalLevelEncoder
-		encoderCfg.EncodeDuration = zapcore.SecondsDurationEncoder
-		encoderCfg.EncodeCaller = zapcore.ShortCallerEncoder
+func NewZapLogger(service string, paths ...string) (*zap.SugaredLogger, error) {
+	encoderCfg := zap.NewProductionEncoderConfig()
+	encoderCfg.TimeKey = "timestamp"
+	encoderCfg.EncodeTime = zapcore.ISO8601TimeEncoder
+	encoderCfg.LevelKey = "level"
+	encoderCfg.NameKey = "logger"
+	encoderCfg.CallerKey = "caller"
+	encoderCfg.MessageKey = "message"
+	encoderCfg.StacktraceKey = "stacktrace"
+	encoderCfg.EncodeLevel = zapcore.CapitalLevelEncoder
+	encoderCfg.EncodeDuration = zapcore.SecondsDurationEncoder
+	encoderCfg.EncodeCaller = zapcore.ShortCallerEncoder
 
-		config := zap.Config{
-			Level:             zap.NewAtomicLevelAt(zap.DebugLevel),
-			Development:       false,
-			DisableCaller:     false,
-			DisableStacktrace: false,
-			Sampling:          nil,
-			Encoding:          "json",
-			EncoderConfig:     encoderCfg,
-			OutputPaths: []string{
-				"stdout",
-				path,
-			},
-			ErrorOutputPaths: []string{
-				"stderr",
-			},
-			InitialFields: map[string]interface{}{
-				"pid": os.Getpid(),
-			},
-		}
-		logger = zap.Must(config.Build())
-	case "staging":
-		encoderCfg := zap.NewProductionEncoderConfig()
-		encoderCfg.TimeKey = "timestamp"
-		encoderCfg.EncodeTime = zapcore.ISO8601TimeEncoder
-		encoderCfg.LevelKey = "level"
-		encoderCfg.NameKey = "logger"
-		encoderCfg.CallerKey = "caller"
-		encoderCfg.MessageKey = "message"
-		encoderCfg.StacktraceKey = "stacktrace"
-		encoderCfg.EncodeLevel = zapcore.CapitalLevelEncoder
-		encoderCfg.EncodeDuration = zapcore.SecondsDurationEncoder
-		encoderCfg.EncodeCaller = zapcore.ShortCallerEncoder
-
-		config := zap.Config{
-			Level:             zap.NewAtomicLevelAt(zap.DebugLevel),
-			Development:       false,
-			DisableCaller:     false,
-			DisableStacktrace: false,
-			Sampling:          nil,
-			Encoding:          "json",
-			EncoderConfig:     encoderCfg,
-			OutputPaths: []string{
-				"stdout",
-				path,
-			},
-			ErrorOutputPaths: []string{
-				"stderr",
-			},
-			InitialFields: map[string]interface{}{
-				"pid": os.Getpid(),
-			},
-		}
-		logger = zap.Must(config.Build())
-	case "testing":
-		encoderCfg := zap.NewProductionEncoderConfig()
-		encoderCfg.TimeKey = "timestamp"
-		encoderCfg.EncodeTime = zapcore.ISO8601TimeEncoder
-		encoderCfg.LevelKey = "level"
-		encoderCfg.NameKey = "logger"
-		encoderCfg.CallerKey = "caller"
-		encoderCfg.MessageKey = "message"
-		encoderCfg.StacktraceKey = "stacktrace"
-		encoderCfg.EncodeLevel = zapcore.CapitalLevelEncoder
-		encoderCfg.EncodeDuration = zapcore.SecondsDurationEncoder
-		encoderCfg.EncodeCaller = zapcore.ShortCallerEncoder
-
-		config := zap.Config{
-			Level:             zap.NewAtomicLevelAt(zap.DebugLevel),
-			Development:       false,
-			DisableCaller:     false,
-			DisableStacktrace: false,
-			Sampling:          nil,
-			Encoding:          "json",
-			EncoderConfig:     encoderCfg,
-			OutputPaths: []string{
-				"stdout",
-				path,
-			},
-			ErrorOutputPaths: []string{
-				"stderr",
-			},
-			InitialFields: map[string]interface{}{
-				"pid": os.Getpid(),
-			},
-		}
-		logger = zap.Must(config.Build())
-	case "development":
-		encoderCfg := zap.NewProductionEncoderConfig()
-		encoderCfg.TimeKey = "timestamp"
-		encoderCfg.EncodeTime = zapcore.ISO8601TimeEncoder
-		encoderCfg.LevelKey = "level"
-		encoderCfg.NameKey = "logger"
-		encoderCfg.CallerKey = "caller"
-		encoderCfg.MessageKey = "message"
-		encoderCfg.StacktraceKey = "stacktrace"
-		encoderCfg.EncodeLevel = zapcore.CapitalLevelEncoder
-		encoderCfg.EncodeDuration = zapcore.SecondsDurationEncoder
-		encoderCfg.EncodeCaller = zapcore.ShortCallerEncoder
-
-		config := zap.Config{
-			Level:             zap.NewAtomicLevelAt(zap.DebugLevel),
-			Development:       false,
-			DisableCaller:     false,
-			DisableStacktrace: false,
-			Sampling:          nil,
-			Encoding:          "json",
-			EncoderConfig:     encoderCfg,
-			OutputPaths: []string{
-				"stdout",
-				path,
-			},
-			ErrorOutputPaths: []string{
-				"stderr",
-				path,
-			},
-			InitialFields: map[string]interface{}{
-				"pid": os.Getpid(),
-			},
-		}
-		logger = zap.Must(config.Build())
+	config := zap.Config{
+		Level:             zap.NewAtomicLevelAt(zap.DebugLevel),
+		Development:       false,
+		DisableCaller:     false,
+		DisableStacktrace: false,
+		Sampling:          nil,
+		Encoding:          "json",
+		EncoderConfig:     encoderCfg,
+	}
+	config.InitialFields = map[string]interface{}{
+		"service": service,
+		"pid":     os.Getpid(),
+	}
+	config.OutputPaths = []string{"stdout"}
+	if paths != nil {
+		config.OutputPaths = append(config.OutputPaths, paths...)
+	}
+	config.ErrorOutputPaths = []string{"stderr"}
+	if paths != nil {
+		config.ErrorOutputPaths = append(config.ErrorOutputPaths, paths...)
 	}
 
-	defer func(logger *zap.Logger) {
-		err := logger.Sync()
-		if err != nil && !errors.Is(err, syscall.ENOTTY) {
-			logger.Error("Failed to sync logger", zap.Error(err))
-		}
-	}(logger)
-	return logger
+	logger, err := config.Build(zap.WithCaller(true))
+	if err != nil {
+		return nil, err
+	}
+
+	return logger.Sugar(), nil
 }

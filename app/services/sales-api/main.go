@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 	"github.com/farmani/service/foundation/logger"
 	"go.uber.org/zap"
@@ -12,32 +11,38 @@ import (
 )
 
 func main() {
-	log := logger.NewZapLogger("logs/error.logs", "developement")
-
-	defer func(log *zap.Logger) {
+	log, err := logger.NewZapLogger("sales-api", "logs/sales-api.log")
+	if err != nil {
+		fmt.Println("Failed to initialize logger", err)
+		os.Exit(1)
+	}
+	defer func(log *zap.SugaredLogger) {
 		err := log.Sync()
-		if err != nil && !errors.Is(err, syscall.ENOTTY) {
-			fmt.Println("Failed to sync logger", err)
+		if err != nil {
+			return
 		}
 	}(log)
 
 	if err := run(log); err != nil {
-		log.Error("Failed to run service", zap.Error(err))
-		log.Sync()
+		log.Errorw("Failed to run service", "Error", err)
+		err := log.Sync()
+		if err != nil {
+			return
+		}
 		os.Exit(1)
 	}
 }
 
-func run(log *zap.Logger) error {
+func run(log *zap.SugaredLogger) error {
 
 	// -------------------------------------------------
 	// Setup our application
-	log.Info(
+	log.Infow(
 		"Starting service",
-		zap.String("version", "1.0.0"),
-		zap.String("env", "developement"),
-		zap.String("port", "8080"),
-		zap.Int("GOMAXPROCS", runtime.GOMAXPROCS(0)),
+		"version", "1.0.0",
+		"env", "development",
+		"port", "8080",
+		"GOMAXPROCS", runtime.GOMAXPROCS(0),
 	)
 
 	// -------------------------------------------------
@@ -46,7 +51,11 @@ func run(log *zap.Logger) error {
 	signal.Notify(shutdown, syscall.SIGINT, syscall.SIGTERM)
 
 	sig := <-shutdown
-	log.Info("Shutdown signal received", zap.String("signal", sig.String()))
-	defer log.Info("Shutdown complete")
+	log.Infow(
+		"Shutdown signal received",
+		"signal", sig.String(),
+	)
+	defer log.Infow("Shutdown complete")
+
 	return nil
 }
