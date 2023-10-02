@@ -13,7 +13,7 @@ import (
 var build = "develop"
 
 func main() {
-	log, err := logger.NewZapLogger("sales-api", "logs/sales-api.log")
+	log, err := logger.NewZapLogger("sales-api")
 	if err != nil {
 		fmt.Println("Failed to initialize logger", err)
 		os.Exit(1)
