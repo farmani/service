@@ -69,7 +69,7 @@ spec:
       # the Go program about a core, maybe less.
       #
       # In both cases, give the Go runtime a core and set your limit to (limit += 1)
-      # since your Go program is CPU bound. Then let auto scaling take effect.
+      # since your Go program is CPU bound. Then let autoscaling take effect.
       #
       # Ideally you’d give tasks a reservation and no limit. However, I’ve never seen
       # anyone actually write software that deals with the situation where the job all
@@ -86,12 +86,28 @@ spec:
       # Requests are separate from Limits b/c setting requests lower than limits allows
       # for more efficient resource utilization when you start packing multiple PODs
       # onto a given Node. Limits are there to prevent noisy neighbor conditions with
-      # colocated PODs.
+      # collocated PODs.
+
+      # Resource Requests:
+      #
+      # Purpose: Resource requests are used to specify the minimum amount of resources that a container needs to run. Kubernetes uses this information to decide where to place the Pod based on available resources within the cluster.
+      # Example: If you specify a CPU request of 0.5 CPU cores and a memory request of 256Mi (mebibytes), Kubernetes will ensure that the Pod is scheduled to a node with at least these resources available. This prevents overloading nodes with containers that require more resources than are available.
+      # Impact: Resource requests affect the initial placement and scheduling of Pods within the cluster. Kubernetes will only place a Pod on a node if the node has enough available resources to satisfy the Pod's request.
+      #
+      # Resource Limits:
+      #
+      # Purpose: Resource limits are used to specify the maximum amount of resources that a container is allowed to consume. This is a safety mechanism to prevent containers from monopolizing resources on a node and potentially causing performance problems for other containers on the same node.
+      # Example: If you set a CPU limit of 1 CPU core and a memory limit of 512Mi for a container, it means that the container can consume up to these limits but will not be allowed to exceed them. If the container attempts to use more resources than its limit, Kubernetes will throttle or terminate the container.
+      # Impact: Resource limits affect the behavior of containers once they are running. They ensure that a container cannot use more resources than it has been allocated, helping to maintain cluster stability and prevent resource contention.
+      # In summary, resource requests are used for scheduling and placement decisions, ensuring that Pods are placed on nodes with sufficient resources to meet their requirements. Resource limits, on the other hand, enforce constraints on how much CPU and memory a container can actually consume, preventing resource hogging and ensuring fair resource distribution within the cluster.
+      # It's important to configure both resource requests and limits appropriately for your containers to ensure efficient resource utilization and cluster stability. Failing to set reasonable values for these parameters can lead to performance issues and resource contention in your Kubernetes cluster.
 
       containers:
         - name: sales-api
           resources:
             requests:
               cpu: "500m" # I need access to 1/2 core on the node.
+              memory: "500Mi"
             limits:
               cpu: "500m" # Execute instructions 50ms/100ms on my 1 core.
+              memory: "500Mi"
