@@ -1,13 +1,16 @@
 package main
 
 import (
+	"errors"
 	"fmt"
+	"github.com/ardanlabs/conf/v3"
 	"github.com/farmani/service/foundation/logger"
 	"go.uber.org/zap"
 	"os"
 	"os/signal"
 	"runtime"
 	"syscall"
+	"time"
 )
 
 var build = "develop"
@@ -46,6 +49,35 @@ func run(log *zap.SugaredLogger) error {
 		"port", "8080",
 		"GOMAXPROCS", runtime.GOMAXPROCS(0),
 	)
+
+	// -------------------------------------------------------------------------
+	// Configuration
+
+	cfg := struct {
+		conf.Version
+		Web struct {
+			ReadTimeout     time.Duration `conf:"default:5s"`
+			WriteTimeout    time.Duration `conf:"default:10s"`
+			IdleTimeout     time.Duration `conf:"default:120s"`
+			ShutdownTimeout time.Duration `conf:"default:20s"`
+			APIHost         string        `conf:"default:0.0.0.0:3000"`
+			DebugHost       string        `conf:"default:0.0.0.0:4000"`
+		}
+	}{
+		Version: conf.Version{
+			Build: build,
+			Desc:  "RAMIN FARMANI",
+		},
+	}
+	const prefix = "SALES"
+	help, err := conf.Parse(prefix, &cfg)
+	if err != nil {
+		if errors.Is(err, conf.ErrHelpWanted) {
+			fmt.Println(help)
+			return nil
+		}
+		return fmt.Errorf("parsing config: %w", err)
+	}
 
 	// -------------------------------------------------
 	// Start the service

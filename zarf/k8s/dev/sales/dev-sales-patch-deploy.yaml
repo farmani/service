@@ -88,7 +88,7 @@ spec:
       # onto a given Node. Limits are there to prevent noisy neighbor conditions with
       # collocated PODs.
 
-      # Resource Requests:
+      # Resource Requests:m
       #
       # Purpose: Resource requests are used to specify the minimum amount of resources that a container needs to run. Kubernetes uses this information to decide where to place the Pod based on available resources within the cluster.
       # Example: If you specify a CPU request of 0.5 CPU cores and a memory request of 256Mi (mebibytes), Kubernetes will ensure that the Pod is scheduled to a node with at least these resources available. This prevents overloading nodes with containers that require more resources than are available.
@@ -106,8 +106,8 @@ spec:
         - name: sales-api
           resources:
             requests:
-              cpu: "500m" # I need access to 1/2 core on the node.
+              cpu: "1500m" # I need access to 1+1/2 core on the node.
               memory: "500Mi"
             limits:
-              cpu: "500m" # Execute instructions 50ms/100ms on my 1 core.
+              cpu: "1500m" # Execute instructions 150ms/200ms on my 1 core.
               memory: "500Mi"
