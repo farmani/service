@@ -1,11 +1,15 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"github.com/ardanlabs/conf/v3"
+	"github.com/farmani/service/app/services/sales-api/handlers"
+	"github.com/farmani/service/business/web/v1/debug"
 	"github.com/farmani/service/foundation/logger"
 	"go.uber.org/zap"
+	"net/http"
 	"os"
 	"os/signal"
 	"runtime"
@@ -13,6 +17,10 @@ import (
 	"time"
 )
 
+/*
+Need to figure out timeouts for http service.
+Add Category field and type to product.
+*/
 var build = "develop"
 
 func main() {
@@ -39,16 +47,8 @@ func main() {
 }
 
 func run(log *zap.SugaredLogger) error {
-
 	// -------------------------------------------------
-	// Setup our application
-	log.Infow(
-		"Starting service",
-		"version", "1.0.0",
-		"env", "development",
-		"port", "8080",
-		"GOMAXPROCS", runtime.GOMAXPROCS(0),
-	)
+	// Start the service
 
 	// -------------------------------------------------------------------------
 	// Configuration
@@ -79,17 +79,82 @@ func run(log *zap.SugaredLogger) error {
 		return fmt.Errorf("parsing config: %w", err)
 	}
 
+	// -------------------------------------------------------------------------
+	// Start Debug Service
+
+	go func() {
+		log.Infow("startup", "status", "debug v1 router started", "host", cfg.Web.DebugHost)
+
+		if err := http.ListenAndServe(cfg.Web.DebugHost, debug.StandardLibraryMux()); err != nil {
+			log.Errorw("shutdown", "status", "debug v1 router closed", "host", cfg.Web.DebugHost, "msg", err)
+		}
+	}()
+
 	// -------------------------------------------------
-	// Start the service
+	// Start Application Service
+	defer log.Infow("Shutdown complete")
+	out, err := conf.String(&cfg)
+	if err != nil {
+		return fmt.Errorf("generating config for output: %w", err)
+	}
+	log.Infow("startup", "config", out)
+
 	shutdown := make(chan os.Signal, 1)
 	signal.Notify(shutdown, syscall.SIGINT, syscall.SIGTERM)
 
-	sig := <-shutdown
 	log.Infow(
-		"Shutdown signal received",
-		"signal", sig.String(),
+		"startup",
+		"version", cfg.Version.Build,
+		"env", "development",
+		"port", cfg.Web.APIHost,
+		"GOMAXPROCS", runtime.GOMAXPROCS(0),
 	)
-	defer log.Infow("Shutdown complete")
+
+	apiMux := handlers.APIMux(handlers.APIMuxConfig{
+		Build:    build,
+		Log:      log,
+		Shutdown: shutdown,
+	})
+
+	api := http.Server{
+		Addr:         cfg.Web.APIHost,
+		Handler:      apiMux,
+		ReadTimeout:  cfg.Web.ReadTimeout,
+		WriteTimeout: cfg.Web.WriteTimeout,
+		IdleTimeout:  cfg.Web.IdleTimeout,
+		ErrorLog:     zap.NewStdLog(log.Desugar()),
+	}
+
+	serverErrors := make(chan error, 1)
+
+	go func() {
+		log.Infow("startup", "status", "api router started", "host", api.Addr)
+
+		serverErrors <- api.ListenAndServe()
+	}()
+
+	// -------------------------------------------------
+	// Shutdown
+
+	select {
+	case err := <-serverErrors:
+		return fmt.Errorf("server error: %w", err)
+
+	case sig := <-shutdown:
+		log.Infow("shutdown", "status", "shutdown started", "signal", sig)
+		defer log.Infow("shutdown", "status", "shutdown complete", "signal", sig)
+
+		ctx, cancel := context.WithTimeout(context.Background(), cfg.Web.ShutdownTimeout)
+		defer cancel()
+
+		if err := api.Shutdown(ctx); err != nil {
+			err := api.Close()
+			if err != nil {
+				return fmt.Errorf("could not close server gracefully: %w", err)
+			}
+			return fmt.Errorf("could not stop server gracefully: %w", err)
+		}
+	}
 
 	return nil
 }

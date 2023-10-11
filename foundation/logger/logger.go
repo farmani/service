@@ -38,7 +38,7 @@ type Logger struct {
 
 func NewZapLogger(service string, paths ...string) (*zap.SugaredLogger, error) {
 	encoderCfg := zap.NewProductionEncoderConfig()
-	encoderCfg.TimeKey = "timestamp"
+	encoderCfg.TimeKey = "time"
 	encoderCfg.EncodeTime = zapcore.ISO8601TimeEncoder
 	encoderCfg.LevelKey = "level"
 	encoderCfg.NameKey = "logger"
