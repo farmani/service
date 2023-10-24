@@ -53,7 +53,7 @@ func NewZapLogger(service string, paths ...string) (*zap.SugaredLogger, error) {
 		Level:             zap.NewAtomicLevelAt(zap.DebugLevel),
 		Development:       false,
 		DisableCaller:     false,
-		DisableStacktrace: false,
+		DisableStacktrace: true,
 		Sampling:          nil,
 		Encoding:          "json",
 		EncoderConfig:     encoderCfg,

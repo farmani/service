@@ -4,17 +4,21 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/ardanlabs/conf/v3"
-	"github.com/farmani/service/app/services/sales-api/handlers"
-	"github.com/farmani/service/business/web/v1/debug"
-	"github.com/farmani/service/foundation/logger"
-	"go.uber.org/zap"
 	"net/http"
 	"os"
 	"os/signal"
 	"runtime"
 	"syscall"
 	"time"
+
+	"github.com/ardanlabs/conf/v3"
+	"github.com/farmani/service/app/services/sales-api/handlers"
+	database "github.com/farmani/service/business/sys/database/pgx"
+	"github.com/farmani/service/business/web/auth"
+	"github.com/farmani/service/business/web/v1/debug"
+	"github.com/farmani/service/foundation/keystore"
+	"github.com/farmani/service/foundation/logger"
+	"go.uber.org/zap"
 )
 
 /*
@@ -63,6 +67,20 @@ func run(log *zap.SugaredLogger) error {
 			APIHost         string        `conf:"default:0.0.0.0:3000"`
 			DebugHost       string        `conf:"default:0.0.0.0:4000"`
 		}
+		DB struct {
+			User         string `conf:"default:postgres"`
+			Password     string `conf:"default:postgres,mask"`
+			Host         string `conf:"default:database-service.sales-system.svc.cluster.local"`
+			Name         string `conf:"default:postgres"`
+			MaxIdleConns int    `conf:"default:2"`
+			MaxOpenConns int    `conf:"default:0"`
+			DisableTLS   bool   `conf:"default:true"`
+		}
+		Auth struct {
+			KeysFolder string `conf:"default:zarf/keys/"`
+			ActiveKID  string `conf:"default:54bb2165-71e1-41a6-af3e-7da4a0e1e2c1"`
+			Issuer     string `conf:"default:zarf.sales.api"`
+		}
 	}{
 		Version: conf.Version{
 			Build: build,
@@ -78,26 +96,67 @@ func run(log *zap.SugaredLogger) error {
 		}
 		return fmt.Errorf("parsing config: %w", err)
 	}
+	out, err := conf.String(&cfg)
+	if err != nil {
+		return fmt.Errorf("generating config for output: %w", err)
+	}
+	log.Infow("startup", "config", out)
 
+	// -------------------------------------------------------------------------
+	// Database support
+	log.Infow("startup", "status", "initializing database support", "host", cfg.DB.Host)
+
+	db, err := database.Open(database.Config{
+		User:         cfg.DB.User,
+		Password:     cfg.DB.Password,
+		Host:         cfg.DB.Host,
+		Name:         cfg.DB.Name,
+		MaxIdleConns: cfg.DB.MaxIdleConns,
+		MaxOpenConns: cfg.DB.MaxOpenConns,
+		DisableTLS:   cfg.DB.DisableTLS,
+	})
+	if err != nil {
+		return fmt.Errorf("connecting to db: %w", err)
+	}
+	defer func() {
+		log.Infow("shutdown", "status", "stopping database support", "host", cfg.DB.Host)
+		db.Close()
+	}()
 	// -------------------------------------------------------------------------
 	// Start Debug Service
 
 	go func() {
 		log.Infow("startup", "status", "debug v1 router started", "host", cfg.Web.DebugHost)
 
-		if err := http.ListenAndServe(cfg.Web.DebugHost, debug.StandardLibraryMux()); err != nil {
+		if err := http.ListenAndServe(cfg.Web.DebugHost, debug.Mux(build, log, db)); err != nil {
 			log.Errorw("shutdown", "status", "debug v1 router closed", "host", cfg.Web.DebugHost, "msg", err)
 		}
 	}()
 
+	// -------------------------------------------------------------------------
+	// Initialize authentication support
+
+	log.Infow("startup", "status", "initializing authentication.rego support")
+
+	// Simple keystore versus using Vault.
+	ks, err := keystore.NewFS(os.DirFS(cfg.Auth.KeysFolder))
+	if err != nil {
+		return fmt.Errorf("reading keys: %w", err)
+	}
+
+	authCfg := auth.Config{
+		Log:       log,
+		KeyLookup: ks,
+	}
+
+	authentication, err := auth.New(authCfg)
+	if err != nil {
+		return fmt.Errorf("constructing authentication: %w", err)
+	}
+
 	// -------------------------------------------------
 	// Start Application Service
 	defer log.Infow("Shutdown complete")
-	out, err := conf.String(&cfg)
-	if err != nil {
-		return fmt.Errorf("generating config for output: %w", err)
-	}
-	log.Infow("startup", "config", out)
 
 	shutdown := make(chan os.Signal, 1)
 	signal.Notify(shutdown, syscall.SIGINT, syscall.SIGTERM)
@@ -114,6 +173,7 @@ func run(log *zap.SugaredLogger) error {
 		Build:    build,
 		Log:      log,
 		Shutdown: shutdown,
+		Auth:     authentication,
 	})
 
 	api := http.Server{
